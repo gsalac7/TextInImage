@@ -1,7 +1,9 @@
 Text In Image
+
 Author: Gabe Salac
 
 Architecture:
+
 Written in Python using Pillow Library
 
 encode() takes the text, input image, and output image and encodes the text into the output image. The message length is taken and encoded into the first 11 pixels. Every binary value extracted is padded with 0's until it is 8 bits long. Then it is embedded into the least significant bit of each RGB value.
