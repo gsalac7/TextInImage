@@ -2,7 +2,7 @@
 
 ## Author: Gabe Salac
 
-## Architecture:
+### Architecture:
 
 Written in Python using Pillow Library
 
@@ -11,7 +11,7 @@ Written in Python using Pillow Library
 - decode() takes an image and decodes the message. The message length is taken from the first 11 pixels. The binary values of the message are taken as one long continuous string, and then divided into a list of 8 bits each. The 8 bits are then translated into its binary ASCII value.
 
 
-## To Execute:
+### To Execute:
 
 Encoding:
 ```
