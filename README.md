@@ -2,6 +2,9 @@
 
 ## Author: Gabe Salac
 
+### Description:
+This program is going to embed a secret message into the pixels of an image. It will take a JPEG image and output the secret text into a PNG image.
+
 ### Architecture:
 
 Written in Python using Pillow Library
