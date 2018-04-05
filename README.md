@@ -1,6 +1,6 @@
 # Text In Image
 
-## author: Gabe Salac
+## Author: Gabe Salac
 
 ## Architecture:
 
