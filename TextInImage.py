@@ -1,200 +1,287 @@
 from PIL import Image
 import sys
+import binascii
 
 # check the image format to see if JPEG
 def is_JPEG(Image):
-    if Image.format == 'JPEG':
-        return True
-    return False
-
-# pad the binary value until it is 8 bits
-def pad_binary(binary):
-    while len(binary) < 8:
-        binary = '0' + binary
-    return binary
+  if Image.format == 'JPEG':
+    return True
+  return False
 
 # read from the file and open the picture
 def setup(file, picture):
-    pic = Image.open(picture)
-    # convert to jpeg if not already
-    if is_JPEG(pic) == False:
-        print('File is not JPEG')
-        print('Converting to JPEG...')
-        # change to JPEG'
-        rgb_im = pic.convert('RGB')
-        rgb_im.save('testImage.jpg', 'JPEG')
-    pic = Image.open('testImage.jpg')
-    f = open(file, 'r')
-    source_code = f.read()
-    f.close()
-    return source_code, pic
+  pic = Image.open(picture)
+  # convert to jpeg if not already
+  if is_JPEG(pic) == False:
+    picture = picture.split('.')
+    print('File is not JPEG')
+    print('Converting to JPEG...')
+    # change to JPEG'
+    pic_string = picture[0] + '.jpg'
+    rgb_im = pic.convert('RGB')
+    rgb_im.save(pic_string, 'JPEG')
+    pic = Image.open(pic_string)
+  f = open(file, 'r')
+  source_code = f.read()
+  f.close()
+  return source_code, pic
 
-# get the binary values of the string
+# Helper functions to turn the string to binary
+# pad the binary value until it is 8 bits
+def pad_binary(binary):
+  while len(binary) < 8:
+    binary = '0' + binary
+  return binary
+
+# get the binary values of the string and pad until
+# they are 8 bits. Return the string as a list of 8 
+# bits
 def str_to_bin(string):
-    binaries = ' '.join(format(ord(x), 'b') for x in string)
-    binaries = binaries.split()
-    for i in range(len(binaries)):
-        binaries[i] = pad_binary(binaries[i])
-    binaries = ''.join(binaries)
-    return list(binaries)
+  binaries = ' '.join(format(ord(x), 'b') for x in string)
+  binaries = binaries.split()
+  for i in range(len(binaries)):
+    binaries[i] = pad_binary(binaries[i])
+  binaries = ''.join(binaries)
+  return list(binaries)
 
-# get the integer as a binary string
+# Turn an integer to binary
 def int_to_bin(integer):
-    return str(bin(integer))[2:]
+  return bin(integer)[2:]
 
-# takes binary as a string of 1's and 0's and returns it as an int to
-# encode into the picture
+# turn binary back into an int
 def bin_to_int(binary):
-    return int(str(binary), 2)
+  return int(binary, 2)
 
-# change the least significant bit
-def input_value(rgb_bin, input_value):
-    rgb_bin = list(rgb_bin)
-    if input_value == '':
-        rgb_bin.pop()
+# Function to put the actual data into the least significant bit
+def input_value(rgb_bin, value):
+  rgb_bin = list(rgb_bin)
+  rgb_bin[-1] = value
+  return rgb_bin
+
+# The function to embed the length and the text
+def embed(code, source_pic, output_pic):
+  # get the number of bits
+  msg_len = len(code) * 8
+  print('The Length of the message is:', msg_len, 'bits')
+  # get the width and height of the picture
+  width, height = source_pic.size
+
+  # convert the msg_len to binary format
+  msg_len = int_to_bin(msg_len)
+  msg_len = str(msg_len)
+  
+  # pad it to 32 bits
+  while len(msg_len) < 32:
+    msg_len = '0' + msg_len
+
+  # input the length of the bits in the first 11 pixels starting
+  # from the bottom right 
+  msg_len = list(msg_len)
+  for i in range(width - 1, width - 12, -1):
+    if len(msg_len) == 0:
+      break
+    r,g,b = source_pic.getpixel((i, height-1))
+    # Get the RGB values in binary
+    r_bin = int_to_bin(r)
+    g_bin = int_to_bin(g)
+    b_bin = int_to_bin(b)
+    
+    # as long as there is still something to pop,
+    # keep embedding the length
+    if len(msg_len) != 0:
+      r_bin = input_value(r_bin, msg_len.pop(0))
+    if len(msg_len) != 0:
+      g_bin = input_value(g_bin, msg_len.pop(0))
+    if len(msg_len) != 0:
+      b_bin = input_value(b_bin, msg_len.pop(0))   
+
+    # convert the modified binaries into an integer
+    r = bin_to_int(''.join(r_bin))
+    g = bin_to_int(''.join(g_bin))
+    b = bin_to_int(''.join(b_bin))
+
+    # put the pixels in the proper spots
+    source_pic.putpixel((i, height - 1), (r,g,b))
+
+  # Starting from the bottom right, start getting the r,g,b values
+  # of the pixels
+  code = str_to_bin(code)
+  code = list(code)
+  finished = False
+  for x in range(width - 12, -1, -1):
+    # if the length of the code is finished, then stop the loop
+    r,g,b = source_pic.getpixel((x, height - 1))
+
+    # get the r,g,b values
+    r_bin = int_to_bin(r)
+    g_bin = int_to_bin(g)
+    b_bin = int_to_bin(b)
+
+    # modify the binary as long as there is still something to modify
+    if len(code) != 0: 
+      r_bin = input_value(r_bin, code.pop(0))
     else:
-        rgb_bin[-1] = input_value # right most bit will be the input value
-    return ''.join(rgb_bin) # return as a string
+      finished = True
+      break
+    if len(code) != 0:
+      g_bin = input_value(g_bin, code.pop(0))
+    else:
+      finished = True
+      break
+    if len(code) != 0:  
+      b_bin = input_value(b_bin, code.pop(0))
+    else:
+      finished = True
+      break
 
-# return the binary values of the r, g, b numbers
-def rgb_bin_values(r,g,b):
-    return int_to_bin(r), int_to_bin(g), int_to_bin(b)
+    # convert back to ints
+    r = bin_to_int(''.join(r_bin))
+    g = bin_to_int(''.join(g_bin))
+    b = bin_to_int(''.join(b_bin))
 
-# embed the text int the image
-def encode(code, pic, image):
-    msg_len = len(code)
-    print 'Size of the Messsage being encoded is: ' + str(msg_len)
-    width, height = pic.size
+    source_pic.putpixel((x,height - 1),(r,g,b))
 
-    msg_len_bin = int_to_bin(msg_len)
-    # pad the length of the message
-    while len(msg_len_bin) < 33:
-        msg_len_bin = '0' + msg_len_bin
-    msg_len_bin = list(msg_len_bin)
+  # Traverse the pixels starting from the bottom right
+  if finished == False:
+    for y in range(height - 2, -1, -1):
+      for x in range(width - 1, -1, -1):
+        # if the length of the code is finished, then stop the loop
+        r,g,b = source_pic.getpixel((x,y))
 
-    # use the first 11 pixels to contain the length of the message
-    for x in range(width - 1, width - 12, -1):
-        r,g,b = pic.getpixel((x, height - 1))
+        # get the r,g,b values
+        r_bin = int_to_bin(r)
+        g_bin = int_to_bin(g)
+        b_bin = int_to_bin(b)
 
-        # the r, g, b binaries
-        r_bin, g_bin, b_bin = rgb_bin_values(r,g,b)
+        # modify the binary as long as there is still something to modify
+        if len(code) != 0: 
+          r_bin = input_value(r_bin, code.pop(0))
+        else:
+          finished = True
+          break
+        if len(code) != 0:
+          g_bin = input_value(g_bin, code.pop(0))
+        else:
+          finished = True
+          break
+        if len(code) != 0:  
+          b_bin = input_value(b_bin, code.pop(0))
+        else:
+          finished = True
+          break
+        # convert back to ints
+        r = bin_to_int(''.join(r_bin))
+        g = bin_to_int(''.join(g_bin))
+        b = bin_to_int(''.join(b_bin))
 
-        # embed the values as long as there is still something to embed
-        if len(msg_len_bin) != 0:
-            r_bin = input_value(r_bin, msg_len_bin.pop(0))
-        if len(msg_len_bin) != 0:
-            g_bin = input_value(g_bin, msg_len_bin.pop(0))
-        if len(msg_len_bin) != 0:
-            b_bin = input_value(b_bin, msg_len_bin.pop(0))
+        source_pic.putpixel((x,y),(r,g,b)) 
+      if finished == True:
+        break
 
-        # return the changed values of r, g, b
-        r = bin_to_int(r_bin)
-        g = bin_to_int(g_bin)
-        b = bin_to_int(b_bin)
+  source_pic.save(output_pic)
+  print('Successfully embedded the text')  
 
-        # put the values in the proper pixels
-        pic.putpixel((x, height - 1), (r, g, b))
-    # save image
-    pic.save(image)
+# function to decode the text from the picture
+def decode(embedded_picture):
+  msg_len = ''
+  width, height = embedded_picture.size
+  
+  # Get the size of the message
+  for x in range(width - 1,  width - 12, -1):
+    r,g,b = embedded_picture.getpixel((x, height - 1))
+    
+    r_bin = int_to_bin(r)
+    g_bin = int_to_bin(g)
+    b_bin = int_to_bin(b)
 
-    pic = Image.open(image)
-    # code is now a list of binary values
-    code = str_to_bin(code)
-    # traverse the pixels starting from the bottom right
-    for y in range(height - 1, 0, -1):
-        for x in range(width - 12, 0, -1):
-            # get the rgb pixels as integers
-            r, g, b = pic.getpixel((x,y))
-            # get the rgb binary values
-            r_bin, g_bin, b_bin = rgb_bin_values(r,g,b)
+    msg_len += r_bin[-1]
+    msg_len += g_bin[-1] 
+    # only get the last bit if the msg_len is not 32 bits
+    if len(msg_len) != 32:
+      msg_len += b_bin[-1]
+  msg_len = bin_to_int(msg_len)
+  print('Length of the decoded message is:', msg_len, 'bits')
+  
+  # now get the actual data
+  source_code = ''
+  finished = False
+  for x in range(width - 12, -1, -1):
+    r,g,b = embedded_picture.getpixel((x, height - 1))
+    r_bin = int_to_bin(r)
+    g_bin = int_to_bin(g)
+    b_bin = int_to_bin(b)
 
-            r_bin = pad_binary(r_bin)
-            g_bin = pad_binary(g_bin)
-            b_bin = pad_binary(b_bin)
+    # keep iterating as long as there we are less than the msg_len
+    if len(source_code) != msg_len:
+      source_code += r_bin[-1]
+    else:
+      finished = True
+      break
+    if len(source_code) != msg_len:  
+      source_code += g_bin[-1]
+    else:
+      finished = True
+      break
+    if len(source_code) != msg_len:
+      source_code += b_bin[-1]
+    else:
+      finished = True
+      break
 
-            # as long as the length of the message exists, keep adding values to the r, g, b
-            if len(code) != 0:
-                value = code.pop(0) # pop the first value of the list
-                r_bin = input_value(r_bin, value)
-            if len(code) != 0:
-                value = code.pop(0)
-                g_bin = input_value(g_bin, value)
-            if len(code) != 0:
-                value = code.pop(0)
-                b_bin = input_value(b_bin, value)
-            r = bin_to_int(r_bin)
-            g = bin_to_int(g_bin)
-            b = bin_to_int(b_bin)
+  if finished == False:
+    # traverse through the pixels starting after the 11th pixel
+    for y in range(height - 2, -1, -1):
+      for x in range(width - 1, -1, -1):
+        r,g,b = embedded_picture.getpixel((x, y))
+        r_bin = int_to_bin(r)
+        g_bin = int_to_bin(g)
+        b_bin = int_to_bin(b)
 
-            pic.putpixel((x, y), (r, g, b))
-    pic.save(image)
-    print 'Successfully encoded message'
+        # keep iterating as long as there we are less than the msg_len
+        # get the last bit and append it to the source_code
+        if len(source_code) != msg_len:
+          source_code += r_bin[-1]
+        else:
+          finished = True
+          break
+        if len(source_code) != msg_len:  
+          source_code += g_bin[-1]
+        else:
+          finished = True
+          break
+        if len(source_code) != msg_len:
+          source_code += b_bin[-1]
+        else:
+          finished = True
+          break
+      if finished == True:
+        break
+  
+  # turn the source_code into a list of 8 bits per element
+  source_code = [source_code[i: i+8] for i in range(0, len(source_code), 8)]
 
-# extract the message from the picture
-def decode(pic):
-    # from bottom right, get the length,
-    # then get the thing
-    width, height = pic.size
-    size = ''
-    # get the size
-    for x in range(width - 1, width - 12, -1):
-        r, g, b = pic.getpixel((x, height - 1))
-
-        r_bin, g_bin, b_bin = rgb_bin_values(r,g,b)
-
-        r_value = r_bin[-1]
-        g_value = g_bin[-1]
-        b_value = b_bin[-1]
-
-        # get the least sig bit of the r, g, b values, which contains the size
-        size += r_value + g_value + b_value
-    size = bin_to_int(size)
-    print 'The Length of the decoded message is: ' + str(size)
-
-    print 'Decoding message...'
-    string_bin = ''
-    for y in range(height - 1, 0, -1):
-        finished = False
-        for x in range(width - 12, 0, -1):
-            # get the rgb pixels
-            r,g,b = pic.getpixel((x,y))
-
-            # get the r,b,g binaries
-            r_bin, g_bin, b_bin = rgb_bin_values(r,g,b)
-
-            # get the string
-            string_bin += r_bin[-1] + g_bin[-1] + b_bin[-1]
-            # break the loop once it is finished extracting the message.
-            if len(string_bin) == (size*8):
-                finished = True
-                break
-        if finished:
-            break
-    # divide the string into groups of 8 bits
-    string_bin = [string_bin[i: i+8] for i in range(0, len(string_bin), 8)]
-    output = ''
-    # Only go up to the length of the message
-    for i in range(size):
-        output += chr(int(string_bin[i], 2))
-
-    print 'Successfully decoded message!'
-    print output
+  code = ''
+  # just convert the source_code binaries to characters and print
+  for char in source_code:
+    char_int = bin_to_int(char)
+    code += chr(char_int)
+  print('Successfully Decoded Message:')
+  print(code)
 
 def main():
-    # get the mode either encoding or decoding
-    mode = sys.argv[1]
+  mode = sys.argv[1]
 
-    if mode == 'encode':
-        text_file = sys.argv[2]
-        image = sys.argv[3]
-        put_image = sys.argv[4]
+  if mode == 'encode':
+    text_file = sys.argv[2]
+    image = sys.argv[3]
+    put_image = sys.argv[4]
 
-        message, image = setup(text_file, image)
-        encode(message, image, put_image)
-    elif mode == 'decode':
-        image = sys.argv[2]
-        pic = Image.open(image)
-        decode(pic)
-
-if __name__ == '__main__':
-    main()
+    message, image = setup(text_file, image)
+    embed(message, image, put_image)
+  elif mode == 'decode':
+    image = sys.argv[2]
+    pic = Image.open(image)
+    decode(pic)
+  
+if __name__=='__main__':
+  main()
